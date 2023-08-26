@@ -63,14 +63,20 @@ async function run() {
         const personCollection = database.collection('personInfo');
 
 
-        app.post('/upload', upload.single('file'), async(req, res) => {
-            
+        app.post('/upload', upload.single('file'), async (req, res) => {
+
             const user = req.file;
             const result = await personCollection.insertOne(user);
-            console.log('person',req.file);
+            console.log('person', req.file);
             res.send(result);
 
-            
+
+        })
+
+        app.get('/upload', async(req, res) => {
+            const query = {};
+            const users = await personCollection.find(query).toArray();
+            res.send(users);
         })
 
         console.log('Database connected');
