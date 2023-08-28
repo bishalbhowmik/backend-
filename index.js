@@ -1,105 +1,106 @@
-
 const express = require('express');
-const { MongoClient, ServerApiVersion } = require('mongodb');
-
-const cors = require('cors');
-const multer = require('multer');
+const bodyParser = require('body-parser');
 const path = require('path');
-require('dotenv').config();
+const crypto = require('crypto');
+const mongoose = require('mongoose');
+const multer = require('multer');
+const { GridFsStorage } = require('multer-gridfs-storage');
+const Grid = require('gridfs-stream');
+const methodOverride = require('method-override');
+const cors = require('cors');
+require('dotenv').config()
+const port = 5000;
 
 
 const app = express();
 
-
-//middleware
+// Middleware
+app.use(bodyParser.json());
+app.use(methodOverride('_method'));
 app.use(cors());
 app.use(express.json());
+// app.set('view engine', 'ejs');
+
+//Mongo URI
+
+const mongoURI = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@project1.ee2s1rz.mongodb.net/filesList?retryWrites=true&w=majority`;
+
+// Create mongo connection
+
+const conn = mongoose.createConnection(mongoURI);
 
 
 
+//Init gfs
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'public/Images')
-    },
-    filename: (req, file, cb) => {
-        cb(null, file.fieldname + "_" + Date.now() + path.extname(file.originalname))
+let gfs;
+
+conn.once('open', () => {
+    //Init stream
+    gfs = Grid(conn.db, mongoose.mongo);
+    gfs.collection('uploads');
+})
+
+// Create storage engine
+const storage = new GridFsStorage({
+    url: mongoURI,
+    file: (req, file) => {
+        return new Promise((resolve, reject) => {
+            crypto.randomBytes(16, (err, buf) => {
+                if (err) {
+                    return reject(err);
+                }
+                const filename = buf.toString('hex') + path.extname(file.originalname);
+                const fileInfo = {
+                    filename: filename,
+                    bucketName: 'uploads'
+                };
+                resolve(fileInfo);
+            });
+        });
     }
-})
-
-const upload = multer({
-    storage: storage
-})
+});
+const upload = multer({ storage });
 
 
-app.listen(3001, () => {
-    console.log("Server is running")
-})
+//@route GET /
+//@desc Loads form
+
 
 app.get('/', (req, res) => {
-    res.send('Server is running 3001')
+    res.send('server running');
 })
 
-//// Database
+//@route POST /upload
+//@desc uploads file to DB
 
-//
+app.post('/upload', upload.single('file'), (req, res) => {
+    
 
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@project1.ee2s1rz.mongodb.net/?retryWrites=true&w=majority`;
+    // res.redirect('http://localhost:3000');
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const client = new MongoClient(uri, {
-    serverApi: {
-        version: ServerApiVersion.v1,
-        strict: true,
-        deprecationErrors: true,
-    }
+    res.json({file: req.file});
+    // res.send('successful');
+
+
+
+    
+})
+
+//@route GET /files
+//@desc Display all files in JSON
+
+app.get("/files", async (req, res) => {
+    const file = await gfs.files?.find().toArray();
+    res.json({ 'file': file });
+
 });
 
 
-async function run() {
-    try {
-
-        const database = client.db('personDb');
-        const personCollection = database.collection('personInfo');
-
-
-        app.post('/upload', upload.single('file'), async (req, res) => {
-
-            const user = req.file;
-            const result = await personCollection.insertOne(user);
-            console.log('person', req.file);
-            res.send(result);
-
-
-        })
-
-        app.get('/upload', async(req, res) => {
-            const query = {};
-            const users = await personCollection.find(query).toArray();
-            res.send(users);
-        })
-
-        console.log('Database connected');
-
-    } finally {
-
-    }
-}
-run().catch(console.dir);
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+app.listen(port, () => {
+    console.log('server running', port);
+})
